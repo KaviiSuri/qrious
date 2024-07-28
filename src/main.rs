@@ -1,49 +1,36 @@
+mod img;
+mod qr;
+mod util;
+mod viz;
 use anyhow::Result;
-use base64::Engine;
-use image::{DynamicImage, GenericImageView, ImageReader, Pixel};
-use std::{env, io::Cursor};
+use image::{GenericImageView, ImageReader};
+use std::env;
+
+use crate::viz::Visualizer;
 
 fn main() -> Result<()> {
     let args = env::args().collect::<Vec<String>>();
     let file_name = &args[1];
     let img = ImageReader::open(file_name)?;
     let img = img.decode()?.grayscale();
+
     let (width, height) = img.dimensions();
+    let mut visualizer = Visualizer::new(width, height, file_name.into())?;
 
-    // println!("Image dimensions: {} x {}", width, height);
+    let code = qr::Code::new(&img)?;
 
-    // for y in 0..height {
-    //     for x in 0..width {
-    //         let pixel = img.get_pixel(x, y).to_luma();
-    //         if pixel[0] > 128 {
-    //             print!("@");
-    //         } else {
-    //             print!(" ");
-    //         }
-    //     }
-    //     println!();
-    // }
+    for module in code.horiz_timing_iter() {
+        module.draw(&mut visualizer, "red")?;
+    }
+    for module in code.horiz_format_iter() {
+        module.draw(&mut visualizer, "purple")?;
+    }
 
-    let b64 = image_to_b64(&img)?;
-    let svg_content = format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}">
-            <image href="data:image/png;base64,{b64}" width="{width}" height="{height}" />
-        </svg>"#,
-        width = width,
-        height = height,
-        b64 = b64
-    );
+    for (idx, module) in code.data_iter().take(200).enumerate() {
+        module.draw(&mut visualizer, "orange")?;
+        visualizer.draw_text(module.cx(), module.cy(), idx.to_string().as_str(), "red")?;
+    }
 
-    println!("{}", svg_content);
-
+    visualizer.finish()?;
     return Ok(());
-}
-
-fn image_to_b64(img: &DynamicImage) -> Result<String> {
-    use base64::prelude::BASE64_STANDARD;
-    let mut buf = Cursor::new(Vec::new());
-    img.write_to(&mut buf, image::ImageFormat::Png)?;
-    let image_bytes = buf.into_inner();
-    let b64 = BASE64_STANDARD.encode(&image_bytes);
-    return Ok(b64);
 }

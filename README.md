@@ -5,9 +5,8 @@ I was curious to understand how QR codes work, so I made this. It's a simple QR 
 
 ## Roadmap
 - [x] Load image
-- [ ] Setup a DevTools for debugging using svg
-- [ ] Detect finder patterns
-- [ ] Detect alignment patterns
+- [x] Setup a DevTools for debugging using svg
+- [x] Detect finder patterns
 - [ ] Detect timing patterns
 - [ ] Detect version
 - [ ] Detect format information
