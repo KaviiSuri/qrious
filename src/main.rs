@@ -4,9 +4,29 @@ mod util;
 mod viz;
 use anyhow::Result;
 use image::{GenericImageView, ImageReader};
+use qr::{HorizFormatIter, Output};
 use std::env;
 
-use crate::viz::Visualizer;
+use crate::{qr::get_mask_fn, viz::Visualizer};
+
+fn inspect_format_iter(
+    img: &image::DynamicImage,
+    iter: HorizFormatIter,
+    visualizer: &mut Visualizer,
+) -> Result<impl Fn(u32, u32) -> bool> {
+    let mut mask_val: u8 = 0;
+    for (idx, module) in iter.enumerate() {
+        module.draw(visualizer, "purple")?;
+        let bit = img::is_white_module(&img, &module);
+        if (2..5).contains(&idx) && bit {
+            mask_val |= 1 << (idx - 2);
+        }
+    }
+
+    let mask_fn = get_mask_fn(mask_val).unwrap();
+
+    return Ok(mask_fn);
+}
 
 fn main() -> Result<()> {
     let args = env::args().collect::<Vec<String>>();
@@ -22,11 +42,11 @@ fn main() -> Result<()> {
     for module in code.horiz_timing_iter() {
         module.draw(&mut visualizer, "red")?;
     }
-    for module in code.horiz_format_iter() {
-        module.draw(&mut visualizer, "purple")?;
-    }
 
-    for (idx, module) in code.data_iter().take(200).enumerate() {
+    let mask_fn = inspect_format_iter(&img, code.horiz_format_iter(), &mut visualizer)?;
+
+    for (idx, Output { module, x, y }) in code.data_iter().take(200).enumerate() {
+        let is_white = img::is_white_module(&img, &module);
         module.draw(&mut visualizer, "orange")?;
         visualizer.draw_text(module.cx(), module.cy(), idx.to_string().as_str(), "red")?;
     }

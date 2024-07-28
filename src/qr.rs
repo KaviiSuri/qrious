@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use approx::relative_eq;
 use image::GenericImageView;
 
@@ -83,14 +83,14 @@ impl Code {
 
 pub struct HorizTimingIter<'a> {
     code: &'a Code,
-    x: f32,
+    x: usize,
 }
 impl<'a> HorizTimingIter<'a> {
     #[allow(dead_code)]
     fn new(code: &'a Code) -> Self {
         Self {
             code,
-            x: code.bounds.left() + 7.5 * code.elem_width,
+            x: TIMER_PATTERN_START,
         }
     }
 }
@@ -98,65 +98,54 @@ impl Iterator for HorizTimingIter<'_> {
     type Item = Rect;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.x >= self.code.bounds.right() - 6.5 * self.code.elem_width {
+        if self.x >= self.code.num_horiz_elems() - TIMER_PATTERN_START {
             return None;
         }
-        let timing_rect = Rect::from_center_and_size(
-            self.x,
-            self.code.bounds.top() + 6.5 * self.code.elem_height,
-            self.code.elem_width,
-            self.code.elem_height,
-        );
-        self.x += self.code.elem_width;
+        let timing_rect = self.code.idx_to_module(self.x, TIMER_PATTERN_OFFSET);
+        self.x += 1;
         Some(timing_rect)
     }
 }
 
 const FINDER_NUM_ELEMS: usize = 7;
-const TIMER_PATTERN_OFFSET: usize = 6;
+const TIMER_PATTERN_OFFSET: usize = FINDER_NUM_ELEMS - 1;
+const TIMER_PATTERN_START: usize = FINDER_NUM_ELEMS;
+const FORMAT_PATTERN_OFFSET: usize = FINDER_NUM_ELEMS + 1;
 
 pub struct HorizFormatIter<'a> {
     code: &'a Code,
-    x: f32,
-    first_half_end: f32,
-    second_half_start: f32,
-    top: f32,
+    x: usize,
 }
 
 impl<'a> HorizFormatIter<'a> {
     fn new(code: &'a Code) -> Self {
-        Self {
-            code,
-            x: code.bounds.left(),
-            first_half_end: code.bounds.left() + code.elem_width * FINDER_NUM_ELEMS as f32,
-            second_half_start: code.bounds.right() - (FINDER_NUM_ELEMS as f32 * code.elem_width),
-            top: code.bounds.top() + (FINDER_NUM_ELEMS + 1) as f32 * code.elem_height,
-        }
+        Self { code, x: 0 }
     }
 }
 impl Iterator for HorizFormatIter<'_> {
     type Item = Rect;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.x >= (self.code.bounds.right() - self.code.elem_width / 2.0) {
-            return None;
+        loop {
+            if self.x >= self.code.num_horiz_elems() {
+                return None;
+            }
+
+            let prev_x = self.x;
+
+            self.x += 1;
+            let second_half_start = self.code.num_horiz_elems() - FINDER_NUM_ELEMS - 1;
+
+            if self.x >= FINDER_NUM_ELEMS + 1 && self.x < second_half_start {
+                self.x = second_half_start;
+            }
+
+            if prev_x == FORMAT_PATTERN_OFFSET {
+                continue;
+            }
+
+            return Some(self.code.idx_to_module(prev_x, FORMAT_PATTERN_OFFSET));
         }
-
-        let res = Rect::from_corners(
-            self.x,
-            self.top,
-            self.x + self.code.elem_width,
-            self.top + self.code.elem_height,
-        );
-        self.x += self.code.elem_width;
-
-        if self.x >= (self.first_half_end - self.code.elem_width / 2.0)
-            && self.x <= (self.second_half_start - self.code.elem_width / 2.0)
-        {
-            self.x = self.second_half_start;
-        }
-
-        Some(res)
     }
 }
 
@@ -164,19 +153,18 @@ pub struct DataIter<'a> {
     code: &'a Code,
     x: isize,
     y: isize,
-    next_move_vertical: bool,
-    moving_up: bool,
+    moving_vertically: bool,
+    movement_direction: isize,
 }
 
 impl<'a> DataIter<'a> {
     fn new(code: &'a Code) -> Self {
-        println!("Code bounds: {:?}", code.bounds);
         Self {
             code,
             x: code.num_horiz_elems() as isize - 2,
             y: code.num_vert_elems() as isize,
-            next_move_vertical: true,
-            moving_up: true,
+            moving_vertically: true,
+            movement_direction: -1,
         }
     }
 
@@ -184,67 +172,97 @@ impl<'a> DataIter<'a> {
         let finder_num_elems = FINDER_NUM_ELEMS as isize;
         let width = self.code.num_horiz_elems() as isize;
         let height = self.code.num_vert_elems() as isize;
-        let x_in_finder_region = x < finder_num_elems + 2
-            || (x > width - finder_num_elems - 1 && y < finder_num_elems + 2);
 
-        let y_in_finder_region = y < finder_num_elems + 2
-            || (y >= height - finder_num_elems - 1 && x < finder_num_elems + 2);
+        let x_left_of_left_finder = x < finder_num_elems + 2;
+        let y_above_top_finder = y < finder_num_elems + 2;
 
-        dbg!(x_in_finder_region, y_in_finder_region);
+        let in_tl_finder = x_left_of_left_finder && y_above_top_finder;
 
-        // TODO: Move Module calculations into abstraction with floating point handling
-        (x_in_finder_region && y_in_finder_region)
-            || (x >= width)
-            || (y >= height)
-            || (x < 0)
-            || (y < 0)
+        if in_tl_finder {
+            return true;
+        }
+
+        let y_below_bottom_finder = y >= height - finder_num_elems - 1;
+        let in_bl_finder = x_left_of_left_finder && y_below_bottom_finder;
+
+        if in_bl_finder {
+            return true;
+        }
+
+        let x_right_of_right_finder = x > width - finder_num_elems - 1;
+        let in_tr_finder = x_right_of_right_finder && y_above_top_finder;
+        if in_tr_finder {
+            return true;
+        }
+
+        let out_of_bounds = x >= width || x < 0 || y >= height || y < 0;
+        if out_of_bounds {
+            return true;
+        }
+        return false;
     }
 
     fn should_skip(&self, x: isize, y: isize) -> bool {
         return x == TIMER_PATTERN_OFFSET as isize || y == TIMER_PATTERN_OFFSET as isize;
     }
 
-    fn inc_pos(&mut self) {
-        if self.next_move_vertical {
+    fn do_zig_zag(&mut self) {
+        if self.moving_vertically {
             self.x += 1;
-            let y_adjust = if self.moving_up { -1 } else { 1 };
-            self.y += y_adjust;
-            while self.should_skip(self.x, self.y) {
-                println!("Skipping {} {}", self.x, self.y);
-                self.y += y_adjust;
-            }
+            self.y += self.movement_direction as isize;
         } else {
             self.x -= 1;
         }
+
+        self.moving_vertically = !self.moving_vertically;
     }
+
+    fn do_turn_around(&mut self, last_move_vertical: bool) -> Result<()> {
+        if !self.should_turn_around(self.x, self.y) {
+            return Ok(());
+        }
+
+        if !last_move_vertical {
+            eprintln!(
+                "UNHANDLED HORIZONTAL OUT OF BOUNDS: ({}, {})",
+                self.x, self.y
+            );
+            return Err(anyhow!("unimplemented"));
+        }
+        self.x -= 2;
+        self.y -= self.movement_direction;
+        self.movement_direction *= -1;
+        self.moving_vertically = false;
+        return Ok(());
+    }
+}
+pub struct Output {
+    pub module: Rect,
+    pub x: isize,
+    pub y: isize,
 }
 
 impl Iterator for DataIter<'_> {
-    type Item = Rect;
+    type Item = Output;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let old_y = self.y;
-            let old_x = self.x;
+            let last_move_vertical = self.moving_vertically;
+            self.do_zig_zag();
 
-            self.inc_pos();
-
-            if self.should_turn_around(self.x, self.y) {
-                if self.next_move_vertical {
-                    self.y = old_y;
-                    self.x = old_x;
-                    self.x -= 1;
-                    self.moving_up = !self.moving_up;
-                    self.next_move_vertical = false;
-                    return Some(self.code.idx_to_module(self.x as usize, self.y as usize));
-                } else {
-                    eprintln!("UNHANDLED HORIZONTAL OUT OF BOUNDS");
-                    return None;
-                }
+            if let Err(_) = self.do_turn_around(last_move_vertical) {
+                return None;
             }
-            self.next_move_vertical = !self.next_move_vertical;
-            return Some(self.code.idx_to_module(self.x as usize, self.y as usize));
+
+            if !self.should_skip(self.x, self.y) {
+                break;
+            }
         }
+        return Some(Output {
+            module: self.code.idx_to_module(self.x as usize, self.y as usize),
+            x: self.x,
+            y: self.y,
+        });
     }
 }
 
