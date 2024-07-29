@@ -10,3 +10,4 @@ base64 = "0.22.1"
 maud = "0.26.0"
 xml-rs = "0.8.20"
 approx = "0.5.1"
+clap = { version = "4.5.11", features = ["derive"] }

@@ -7,24 +7,27 @@ use anyhow::anyhow;
 use anyhow::Result;
 use xml::{writer::XmlEvent, EmitterConfig, EventWriter};
 
-const DEBUG_OUTPUT: &str = "debug.svg";
-
 pub struct Visualizer {
     #[allow(dead_code)]
     width: u32,
     #[allow(dead_code)]
     height: u32,
-    #[allow(dead_code)]
-    img_path: PathBuf,
     svg_writer: EventWriter<File>,
 
     stroke_width: f32,
     font_size: f32,
+
+    finished: bool,
 }
 
 impl Visualizer {
-    pub fn new(width: u32, height: u32, img_path: PathBuf) -> Result<Self> {
-        let file = fs::File::create(DEBUG_OUTPUT).unwrap();
+    pub fn new(
+        width: u32,
+        height: u32,
+        output_path: &PathBuf,
+        img_path: Option<PathBuf>,
+    ) -> Result<Self> {
+        let file = fs::File::create(output_path).unwrap();
         let mut svg_writer = EmitterConfig::new()
             .perform_indent(true)
             .create_writer(file);
@@ -34,25 +37,27 @@ impl Visualizer {
                 .attr("xmlns", "http://www.w3.org/2000/svg")
                 .attr("width", &width.to_string())
                 .attr("height", &height.to_string())
-                .attr("style", "zoom: 2"),
+                .attr("style", "zoom: 8"),
         )?;
 
-        svg_writer.write(
-            XmlEvent::start_element("image")
-                .attr("href", &img_path.to_str().ok_or(anyhow!("Invalid path"))?)
-                .attr("width", &width.to_string())
-                .attr("height", &height.to_string()),
-        )?;
+        if let Some(img_path) = img_path {
+            svg_writer.write(
+                XmlEvent::start_element("image")
+                    .attr("href", &img_path.to_str().ok_or(anyhow!("Invalid path"))?)
+                    .attr("width", &width.to_string())
+                    .attr("height", &height.to_string()),
+            )?;
 
-        svg_writer.write(XmlEvent::end_element())?;
+            svg_writer.write(XmlEvent::end_element())?;
+        }
 
         Ok(Visualizer {
             width,
             height,
-            img_path,
             svg_writer,
             stroke_width: (width as f32) / 1000.0,
             font_size: (width as f32) / 50.0,
+            finished: false,
         })
     }
 
@@ -105,7 +110,16 @@ impl Visualizer {
     }
 
     pub fn finish(&mut self) -> Result<()> {
-        self.svg_writer.write(XmlEvent::end_element())?;
+        if !self.finished {
+            self.finished = true;
+            self.svg_writer.write(XmlEvent::end_element())?;
+        }
         Ok(())
+    }
+}
+
+impl Drop for Visualizer {
+    fn drop(&mut self) {
+        self.finish().unwrap();
     }
 }
