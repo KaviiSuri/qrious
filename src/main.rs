@@ -37,7 +37,7 @@ fn main() -> Result<()> {
     let (width, height) = img.dimensions();
     let mut visualizer = Visualizer::new(width, height, file_name.into())?;
 
-    let code = qr::Code::new(&img)?;
+    let code = qr::Code::new(&img, Some(&mut visualizer))?;
 
     for module in code.horiz_timing_iter() {
         module.draw(&mut visualizer, "red")?;

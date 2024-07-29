@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use approx::relative_eq;
 use image::GenericImageView;
 
-use crate::{img::ToVert, util::Rect};
+use crate::{img::ToVert, util::Rect, viz::Visualizer};
 
 pub fn get_mask_fn(mask: u8) -> Option<impl Fn(u32, u32) -> bool> {
     match mask {
@@ -18,8 +18,8 @@ pub struct Code {
 }
 
 impl Code {
-    pub fn new(img: &image::DynamicImage) -> Result<Self> {
-        let finders = find_patterns(&img)?;
+    pub fn new(img: &image::DynamicImage, mut visualizer: Option<&mut Visualizer>) -> Result<Self> {
+        let finders = find_patterns(&img, visualizer.as_deref_mut())?;
         let mut elem_width = 0.0;
         let mut elem_height = 0.0;
         let mut top: f32 = f32::MAX;
@@ -388,7 +388,10 @@ fn add_rect_to_bucket(buckets: &mut Vec<Vec<Rect>>, rect: Rect) {
         .push(rect);
 }
 
-pub fn find_patterns(img: &image::DynamicImage) -> Result<Vec<Rect>> {
+pub fn find_patterns(
+    img: &image::DynamicImage,
+    mut visualizer: Option<&mut Visualizer>,
+) -> Result<Vec<Rect>> {
     let (width, height) = img.dimensions();
 
     use crate::img::ToHoriz;
@@ -400,7 +403,9 @@ pub fn find_patterns(img: &image::DynamicImage) -> Result<Vec<Rect>> {
         for FinderCandidate1D { center, length } in candidates {
             let cx = x as f32 + 0.5;
             horizontal_candidates.push(Rect::from_center_and_size(cx, center, length, 0.0));
-            // visualizer.draw_circle(cx, center, 0.5, "blue")?;
+            if let Some(ref mut vis) = visualizer {
+                vis.draw_circle(cx, center, 0.5, "blue")?;
+            }
         }
     }
 
@@ -412,7 +417,9 @@ pub fn find_patterns(img: &image::DynamicImage) -> Result<Vec<Rect>> {
         for FinderCandidate1D { center, length } in candidates {
             let cy = y as f32 + 0.5;
             vertical_candidates.push(Rect::from_center_and_size(center, cy, 0.0, length));
-            // visualizer.draw_circle(center, cy, 0.5, "red")?;
+            if let Some(ref mut vis) = visualizer {
+                vis.draw_circle(center, cy, 0.5, "red")?;
+            }
         }
     }
 
