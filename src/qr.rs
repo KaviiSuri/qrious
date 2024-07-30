@@ -164,7 +164,6 @@ impl Code {
                 mask_val |= 1 << (i);
             }
         }
-        println!("mask_val = {:#05b}", mask_val);
         let mask_fn = get_mask_fn(mask_val).ok_or(anyhow!("No mask fn found {mask_val:#05b}"))?;
 
         Ok(DataBitIter::new(self, mask_fn, img))
@@ -494,9 +493,6 @@ impl Iterator for DataByteIter<'_> {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.num_bytes_read >= self.length {
-            return None;
-        }
         if let Ok(i) = self.iter.take_or_err(8) {
             let mut next_byte: u8 = 0;
             for (i, output) in i.iter() {
@@ -512,7 +508,6 @@ impl Iterator for DataByteIter<'_> {
                 }
             }
         }
-
         return None;
     }
 }
