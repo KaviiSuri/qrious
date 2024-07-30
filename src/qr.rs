@@ -1,3 +1,5 @@
+use std::iter::Enumerate;
+
 use anyhow::{anyhow, Result};
 use approx::relative_eq;
 use image::GenericImageView;
@@ -79,6 +81,11 @@ impl Code {
         let mask_fn = get_mask_fn(mask_val).ok_or(anyhow!("No mask fn found {mask_val}"))?;
 
         Ok(DataBitIter::new(self, mask_fn, img))
+    }
+
+    #[allow(dead_code)]
+    pub fn data_iter<'a>(&'a self, img: &'a image::DynamicImage) -> Result<DataByteIter> {
+        DataByteIter::new(self.bit_iter(img)?)
     }
 
     #[allow(dead_code)]
@@ -262,6 +269,7 @@ impl<'a> DataBitIter<'a> {
     }
 }
 pub struct Output {
+    #[allow(dead_code)]
     pub module: Rect,
     pub bit: bool,
     #[allow(dead_code)]
@@ -294,6 +302,73 @@ impl Iterator for DataBitIter<'_> {
             y: self.y,
             bit: is_dark != (self.mask_fn)(self.x as u32, self.y as u32),
         });
+    }
+}
+
+pub struct DataByteIter<'a> {
+    iter: Enumerate<DataBitIter<'a>>,
+    #[allow(dead_code)]
+    encoding: u8,
+    #[allow(dead_code)]
+    length: u8,
+    num_bytes_read: u8,
+}
+const NUM_ENCODING_BITS: usize = 4;
+const NUM_LENGTH_BITS: usize = 8;
+
+impl<'a> DataByteIter<'a> {
+    fn new(iter: DataBitIter<'a>) -> Result<Self> {
+        let mut iter = iter.enumerate();
+        let mut encoding: u8 = 0b0000;
+        for (i, item) in iter.take_or_err(NUM_ENCODING_BITS)?.iter() {
+            let bit = item.bit;
+            if bit {
+                encoding |= 1 << (NUM_ENCODING_BITS - 1 - i);
+            }
+        }
+
+        let mut length: u8 = 0b0000;
+        for (i, item) in iter.take_or_err(NUM_LENGTH_BITS)?.iter() {
+            let bit = item.bit;
+            if bit {
+                length |= 1 << (NUM_LENGTH_BITS + NUM_ENCODING_BITS - 1 - i);
+            }
+        }
+
+        dbg!(length);
+        Ok(Self {
+            iter,
+            encoding,
+            length,
+            num_bytes_read: 0,
+        })
+    }
+}
+
+impl Iterator for DataByteIter<'_> {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.num_bytes_read >= self.length {
+            return None;
+        }
+        if let Ok(i) = self.iter.take_or_err(8) {
+            let mut next_byte: u8 = 0;
+            for (i, output) in i.iter() {
+                let bit_idx = (i - NUM_ENCODING_BITS - NUM_LENGTH_BITS) % 8;
+                if output.bit {
+                    next_byte |= 1 << (7 - bit_idx);
+                }
+
+                if bit_idx == 7 {
+                    let ret = next_byte;
+                    self.num_bytes_read += 1;
+                    return Some(ret);
+                }
+            }
+        }
+
+        return None;
     }
 }
 
