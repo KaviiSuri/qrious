@@ -21,6 +21,68 @@ pub fn get_mask_fn(mask: u8) -> Option<MaskFn> {
     }
 }
 
+fn find_elem_size(
+    timing_x: u32,
+    timing_iter_end: u32,
+    get_pix_val: impl Fn(u32) -> bool,
+    size: f32,
+) -> f32 {
+    let mut last_is_white = get_pix_val(timing_x);
+    let mut num_elems = FINDER_NUM_ELEMS * 2 - 1;
+    let mut timing_x = timing_x;
+
+    while timing_x < timing_iter_end {
+        let is_white = get_pix_val(timing_x);
+        if is_white != last_is_white {
+            num_elems += 1;
+        }
+        last_is_white = is_white;
+        timing_x += 1;
+    }
+
+    return size / num_elems as f32;
+}
+
+/// check timing patterns, count number of alternating black/white
+/// use it to estimate the size of the elements
+fn find_elem_sizes(
+    bounds: &Rect,
+    img: &image::DynamicImage,
+    finder_width: f32,
+    finder_height: f32,
+) -> (f32, f32) {
+    let estimated_elem_width = finder_width / FINDER_NUM_ELEMS as f32;
+    let estimated_elem_height = finder_height / FINDER_NUM_ELEMS as f32;
+
+    // go to the middle of the timing pattern row
+    let timing_row_center_px =
+        (bounds.top() + (FINDER_NUM_ELEMS as f32 - 0.5) * estimated_elem_height) as u32;
+
+    // go to the middle of the timing pattern column
+    let timing_col_center_px =
+        (bounds.left() + (FINDER_NUM_ELEMS as f32 - 0.5) * estimated_elem_width) as u32;
+
+    // we go to inside the finder pattern
+    let timing_iter_row_end = (bounds.right() - finder_width + estimated_elem_width / 2.0) as u32;
+    let timing_iter_col_end =
+        (bounds.bottom() - finder_height + estimated_elem_height / 2.0) as u32;
+
+    let elem_width = find_elem_size(
+        timing_col_center_px,
+        timing_iter_row_end,
+        |x| img::is_white(&img.get_pixel(x, timing_row_center_px)),
+        bounds.width(),
+    );
+    let elem_height = find_elem_size(
+        timing_row_center_px,
+        timing_iter_col_end,
+        |y| img::is_white(&img.get_pixel(timing_col_center_px, y)),
+        bounds.height(),
+    );
+
+    return (elem_width, elem_height);
+}
+
 pub struct Code {
     pub bounds: Rect,
     elem_width: f32,
@@ -30,8 +92,8 @@ pub struct Code {
 impl Code {
     pub fn new(img: &image::DynamicImage, mut visualizer: Option<&mut Visualizer>) -> Result<Self> {
         let finders = find_patterns(&img, visualizer.as_deref_mut())?;
-        let mut elem_width = 0.0;
-        let mut elem_height = 0.0;
+        let mut finder_width = 0.0;
+        let mut finder_height = 0.0;
         let mut top: f32 = f32::MAX;
         let mut bottom: f32 = 0.0;
         let mut left: f32 = f32::MAX;
@@ -45,17 +107,19 @@ impl Code {
             if let Some(vis) = visualizer.as_deref_mut() {
                 finder_rect.draw(vis, "yellow", None)?;
             }
-            elem_width += finder_rect.width() / 7.0;
-            elem_height += finder_rect.height() / 7.0;
+            finder_width += finder_rect.width();
+            finder_height += finder_rect.height();
             top = top.min(finder_rect.cy() - finder_rect.height() / 2.0);
             bottom = bottom.max(finder_rect.cy() + finder_rect.height() / 2.0);
             left = left.min(finder_rect.cx() - finder_rect.width() / 2.0);
             right = right.max(finder_rect.cx() + finder_rect.width() / 2.0);
         }
-        elem_width /= finders.len() as f32;
-        elem_height /= finders.len() as f32;
+        finder_width /= finders.len() as f32;
+        finder_height /= finders.len() as f32;
 
         let qr_rect = Rect::from_corners(left, top, right, bottom);
+
+        let (elem_width, elem_height) = find_elem_sizes(&qr_rect, img, finder_width, finder_height);
 
         Ok(Self {
             bounds: qr_rect,
@@ -586,12 +650,7 @@ pub fn find_patterns(
                 height += rect.height();
             }
             let len = bucket.len() as f32;
-            Rect::from_center_and_size(
-                cx / len,
-                cy / len,
-                (width + height) / (2.0 * len),
-                (width + height) / (2.0 * len),
-            )
+            Rect::from_center_and_size(cx / len, cy / len, width / len, height / len)
         })
         .collect::<Vec<Rect>>();
     Ok(finders)
