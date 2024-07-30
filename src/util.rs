@@ -1,5 +1,5 @@
 use crate::viz::Visualizer;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 #[derive(PartialEq, Debug)]
 pub struct Rect {
@@ -95,3 +95,23 @@ impl Rect {
         Ok(())
     }
 }
+
+pub trait IteratorExt: Iterator {
+    fn take_or_err(&mut self, n: usize) -> Result<Vec<Self::Item>>
+    where
+        Self: Sized,
+    {
+        let mut result = Vec::with_capacity(n);
+
+        for _ in 0..n {
+            match self.next() {
+                Some(item) => result.push(item),
+                None => return Err(anyhow!("Not enough elements in iterator")),
+            }
+        }
+
+        Ok(result)
+    }
+}
+
+impl<I: Iterator> IteratorExt for I {}

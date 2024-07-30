@@ -2,9 +2,15 @@ use anyhow::{anyhow, Result};
 use approx::relative_eq;
 use image::GenericImageView;
 
-use crate::{img::ToVert, util::Rect, viz::Visualizer};
+use crate::{
+    img::{self, ToVert},
+    util::{IteratorExt, Rect},
+    viz::Visualizer,
+};
 
-pub fn get_mask_fn(mask: u8) -> Option<impl Fn(u32, u32) -> bool> {
+pub type MaskFn = fn(u32, u32) -> bool;
+
+pub fn get_mask_fn(mask: u8) -> Option<MaskFn> {
     match mask {
         0b000 => Some(|x: u32, _: u32| -> bool { x % 3 == 0 }),
         _ => None,
@@ -56,8 +62,23 @@ impl Code {
         HorizFormatIter::new(self)
     }
     #[allow(dead_code)]
-    pub fn data_iter(&self) -> DataIter {
-        DataIter::new(self)
+    pub fn bit_iter<'a>(&'a self, img: &'a image::DynamicImage) -> Result<DataBitIter> {
+        let mut mask_val = 0;
+        for (i, module) in self
+            .horiz_format_iter()
+            .skip(2)
+            .take_or_err(3)?
+            .iter()
+            .enumerate()
+        {
+            let bit = img::is_white_module(img, &module);
+            if bit {
+                mask_val |= 1 << (i);
+            }
+        }
+        let mask_fn = get_mask_fn(mask_val).ok_or(anyhow!("No mask fn found {mask_val}"))?;
+
+        Ok(DataBitIter::new(self, mask_fn, img))
     }
 
     #[allow(dead_code)]
@@ -149,22 +170,26 @@ impl Iterator for HorizFormatIter<'_> {
     }
 }
 
-pub struct DataIter<'a> {
+pub struct DataBitIter<'a> {
     code: &'a Code,
     x: isize,
     y: isize,
     moving_vertically: bool,
     movement_direction: isize,
+    mask_fn: MaskFn,
+    img: &'a image::DynamicImage,
 }
 
-impl<'a> DataIter<'a> {
-    fn new(code: &'a Code) -> Self {
+impl<'a> DataBitIter<'a> {
+    fn new(code: &'a Code, mask_fn: MaskFn, img: &'a image::DynamicImage) -> Self {
         Self {
             code,
             x: code.num_horiz_elems() as isize - 2,
             y: code.num_vert_elems() as isize,
             moving_vertically: true,
             movement_direction: -1,
+            mask_fn,
+            img,
         }
     }
 
@@ -238,11 +263,14 @@ impl<'a> DataIter<'a> {
 }
 pub struct Output {
     pub module: Rect,
+    pub bit: bool,
+    #[allow(dead_code)]
     pub x: isize,
+    #[allow(dead_code)]
     pub y: isize,
 }
 
-impl Iterator for DataIter<'_> {
+impl Iterator for DataBitIter<'_> {
     type Item = Output;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -258,10 +286,13 @@ impl Iterator for DataIter<'_> {
                 break;
             }
         }
+        let module = self.code.idx_to_module(self.x as usize, self.y as usize);
+        let is_dark = !img::is_white_module(self.img, &module);
         return Some(Output {
-            module: self.code.idx_to_module(self.x as usize, self.y as usize),
+            module,
             x: self.x,
             y: self.y,
+            bit: is_dark != (self.mask_fn)(self.x as u32, self.y as u32),
         });
     }
 }

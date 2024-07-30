@@ -5,30 +5,10 @@ mod viz;
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use image::{GenericImageView, ImageReader};
-use qr::{HorizFormatIter, HorizTimingIter, Output};
+use qr::{HorizFormatIter, HorizTimingIter, MaskFn, Output};
 use std::{fs, path::PathBuf};
 
-use crate::{qr::get_mask_fn, viz::Visualizer};
-
-pub trait IteratorExt: Iterator {
-    fn take_or_err(&mut self, n: usize) -> Result<Vec<Self::Item>>
-    where
-        Self: Sized,
-    {
-        let mut result = Vec::with_capacity(n);
-
-        for _ in 0..n {
-            match self.next() {
-                Some(item) => result.push(item),
-                None => return Err(anyhow!("Not enough elements in iterator")),
-            }
-        }
-
-        Ok(result)
-    }
-}
-
-impl<I: Iterator> IteratorExt for I {}
+use crate::{qr::get_mask_fn, util::IteratorExt, viz::Visualizer};
 
 const NUM_ENCODING_BITS: usize = 4;
 const NUM_LENGTH_BITS: usize = 8;
@@ -63,15 +43,15 @@ fn main() -> Result<()> {
     let code = qr::Code::new(&img, Some(&mut dbg_vis))?;
 
     inspect_timing_iter(code.horiz_timing_iter(), &mut dbg_vis)?;
-    let mask_fn = inspect_format_iter(&img, code.horiz_format_iter(), &mut dbg_vis)?;
+    inspect_format_iter(code.horiz_format_iter(), &mut dbg_vis)?;
 
     code.bounds.draw(&mut decoded_vis, "gray", None)?;
 
-    let mut iter = code.data_iter().enumerate();
+    let mut iter = code.bit_iter(&img)?.enumerate();
 
     let mut encoding: u8 = 0b0000;
     for (i, item) in iter.take_or_err(NUM_ENCODING_BITS)?.iter() {
-        let bit = handle_data(item, *i, &img, &mask_fn, &mut decoded_vis, &mut dbg_vis)?;
+        let bit = handle_data(item, *i, &mut decoded_vis, &mut dbg_vis)?;
         if bit {
             encoding |= 1 << (3 - i);
         }
@@ -80,7 +60,7 @@ fn main() -> Result<()> {
 
     let mut length: u8 = 0;
     for (i, item) in iter.take_or_err(NUM_LENGTH_BITS)?.iter() {
-        let bit = handle_data(item, *i, &img, &mask_fn, &mut decoded_vis, &mut dbg_vis)?;
+        let bit = handle_data(item, *i, &mut decoded_vis, &mut dbg_vis)?;
         if bit {
             length |= 1 << (11 - i);
         }
@@ -90,7 +70,7 @@ fn main() -> Result<()> {
     let mut data: Vec<u8> = Vec::with_capacity(length as usize);
     let mut next_byte: u8 = 0;
     for (i, item) in iter.take_or_err((length as usize) * 8)?.iter() {
-        let bit = handle_data(item, *i, &img, &mask_fn, &mut decoded_vis, &mut dbg_vis)?;
+        let bit = handle_data(item, *i, &mut decoded_vis, &mut dbg_vis)?;
 
         let bit_idx = (i - NUM_ENCODING_BITS - NUM_LENGTH_BITS) % 8;
 
@@ -114,21 +94,17 @@ fn main() -> Result<()> {
 fn handle_data(
     item: &Output,
     idx: usize,
-    img: &image::DynamicImage,
-    mask_fn: &impl Fn(u32, u32) -> bool,
     decoded_vis: &mut Visualizer,
     dbg_vis: &mut Visualizer,
 ) -> Result<bool> {
-    let Output { module, x, y } = item;
-    let is_dark = !img::is_white_module(img, &module);
-    let bit = is_dark != mask_fn(*x as u32, *y as u32);
-    if bit {
+    let Output { module, bit, .. } = item;
+    if *bit {
         module.draw(decoded_vis, "black", Some("black"))?;
     }
     module.draw(dbg_vis, "orange", None)?;
     dbg_vis.draw_text(module.cx(), module.cy(), idx.to_string().as_str(), "red")?;
 
-    Ok(bit)
+    Ok(*bit)
 }
 
 fn init_output_dir(cli: &Cli) -> Result<PathBuf> {
@@ -151,21 +127,9 @@ fn inspect_timing_iter(iter: HorizTimingIter, visualizer: &mut Visualizer) -> Re
     Ok(())
 }
 
-fn inspect_format_iter(
-    img: &image::DynamicImage,
-    iter: HorizFormatIter,
-    visualizer: &mut Visualizer,
-) -> Result<impl Fn(u32, u32) -> bool> {
-    let mut mask_val: u8 = 0;
-    for (idx, module) in iter.enumerate() {
+fn inspect_format_iter(iter: HorizFormatIter, visualizer: &mut Visualizer) -> Result<()> {
+    for module in iter {
         module.draw(visualizer, "purple", None)?;
-        let bit = img::is_white_module(&img, &module);
-        if (2..5).contains(&idx) && bit {
-            mask_val |= 1 << (idx - 2);
-        }
     }
-
-    let mask_fn = get_mask_fn(mask_val).unwrap();
-
-    return Ok(mask_fn);
+    Ok(())
 }
