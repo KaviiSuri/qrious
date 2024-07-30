@@ -2,7 +2,7 @@ mod img;
 mod qr;
 mod util;
 mod viz;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use clap::Parser;
 use image::{GenericImageView, ImageReader};
 use qr::{DataBitIter, HorizFormatIter, HorizTimingIter, Output};
@@ -38,6 +38,7 @@ fn main() -> Result<()> {
     let mut decoded_vis = Visualizer::new(width, height, &cli.output.join("decoded.svg"), None)?;
 
     let code = qr::Code::new(&img, Some(&mut dbg_vis))?;
+    code.bounds.draw(&mut dbg_vis, "gray", None)?;
     code.bounds.draw(&mut decoded_vis, "gray", None)?;
 
     viz_timing_iter(code.horiz_timing_iter(), &mut dbg_vis)?;
@@ -45,11 +46,16 @@ fn main() -> Result<()> {
     viz_bits(code.bit_iter(&img)?, &mut decoded_vis, &mut dbg_vis)?;
 
     let iter = code.data_iter(&img)?;
+    let encoding = iter.encoding;
+    println!("encoding = {encoding:#05b}");
     let data: Vec<_> = iter.collect();
     println!("data = {:?}", data);
-    // print ascii
-    let ascii: String = data.iter().map(|&b| b as char).collect();
-    println!("ascii = {:?}", ascii);
+    if encoding == 0b0010 {
+        let ascii: String = data.iter().map(|&b| b as char).collect();
+        println!("ascii = {:?}", ascii);
+    } else {
+        return Err(anyhow!("Unsupported encoding {encoding:#05b}"));
+    }
 
     return Ok(());
 }

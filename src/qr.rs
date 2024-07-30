@@ -37,7 +37,14 @@ impl Code {
         let mut left: f32 = f32::MAX;
         let mut right: f32 = 0.0;
 
+        if finders.len() != 3 {
+            return Err(anyhow!("Expected 3 finders, got {}", finders.len()));
+        }
+
         for finder_rect in finders.iter() {
+            if let Some(vis) = visualizer.as_deref_mut() {
+                finder_rect.draw(vis, "yellow", None)?;
+            }
             elem_width += finder_rect.width() / 7.0;
             elem_height += finder_rect.height() / 7.0;
             top = top.min(finder_rect.cy() - finder_rect.height() / 2.0);
@@ -80,6 +87,7 @@ impl Code {
                 mask_val |= 1 << (i);
             }
         }
+        println!("mask_val = {:#05b}", mask_val);
         let mask_fn = get_mask_fn(mask_val).ok_or(anyhow!("No mask fn found {mask_val:#05b}"))?;
 
         Ok(DataBitIter::new(self, mask_fn, img))
@@ -311,9 +319,9 @@ impl Iterator for DataBitIter<'_> {
 pub struct DataByteIter<'a> {
     iter: Enumerate<DataBitIter<'a>>,
     #[allow(dead_code)]
-    encoding: u8,
+    pub encoding: u8,
     #[allow(dead_code)]
-    length: u8,
+    pub length: u8,
     num_bytes_read: u8,
 }
 const NUM_ENCODING_BITS: usize = 4;
@@ -338,7 +346,6 @@ impl<'a> DataByteIter<'a> {
             }
         }
 
-        dbg!(length);
         Ok(Self {
             iter,
             encoding,
@@ -446,6 +453,13 @@ struct FinderCandidate1D {
     length: f32,
 }
 
+fn is_almost_same(a: u32, b: u32) -> bool {
+    let af = a as f32;
+    let bf = b as f32;
+
+    (af / bf - 1.0).abs() < 0.2
+}
+
 fn find_candidates(rle: &[RleItem]) -> Vec<FinderCandidate1D> {
     let mut res = vec![];
     if rle.len() < 5 {
@@ -457,22 +471,23 @@ fn find_candidates(rle: &[RleItem]) -> Vec<FinderCandidate1D> {
     for i in 0..end {
         // TODO: Allow for errors
         let reference = rle[i].len;
-        if rle[i + 1].len != reference {
+        if !is_almost_same(rle[i + 1].len, reference) {
             continue;
         }
-        if rle[i + 2].len / reference != 3 {
+        if !is_almost_same(rle[i + 2].len, reference * 3) {
             continue;
         }
-        if rle[i + 3].len != reference {
+        if !is_almost_same(rle[i + 3].len, reference) {
             continue;
         }
-        if rle[i + 4].len != reference {
+        if !is_almost_same(rle[i + 4].len, reference) {
             continue;
         }
+        let length = (rle[i + 4].start + rle[i + 4].len - rle[i].start) as f32;
 
         res.push(FinderCandidate1D {
             center: rle[i + 2].start as f32 + (rle[i + 2].len as f32) / 2.0,
-            length: (reference as f32) * 7.0,
+            length,
         })
     }
 
@@ -511,6 +526,11 @@ pub fn find_patterns(
 
     for x in 0..width {
         let encoding = run_length_encode(&mut img.to_vert(x));
+        // print!("encoding = [");
+        // for rle in encoding.iter() {
+        //     print!("{:?}, ", rle.len);
+        // }
+        // println!("]");
         let candidates = find_candidates(&encoding);
         for FinderCandidate1D { center, length } in candidates {
             let cx = x as f32 + 0.5;
@@ -566,7 +586,12 @@ pub fn find_patterns(
                 height += rect.height();
             }
             let len = bucket.len() as f32;
-            Rect::from_center_and_size(cx / len, cy / len, width / len, height / len)
+            Rect::from_center_and_size(
+                cx / len,
+                cy / len,
+                (width + height) / (2.0 * len),
+                (width + height) / (2.0 * len),
+            )
         })
         .collect::<Vec<Rect>>();
     Ok(finders)

@@ -13,6 +13,6 @@ I was curious to understand how QR codes work, so I made this. It's a simple QR 
 - [x] Detect data
 - [x] Decode data
 - [x] Refactor code to creat an iterator for bytes
-- [ ] Try other data encodings
+- [x] Try other data encodings
 - [ ] Try other QA code versions
 - [ ] Display data

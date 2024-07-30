@@ -37,7 +37,7 @@ impl Visualizer {
                 .attr("xmlns", "http://www.w3.org/2000/svg")
                 .attr("width", &width.to_string())
                 .attr("height", &height.to_string())
-                .attr("style", "zoom: 8"),
+                .attr("style", "zoom: 2"),
         )?;
 
         if let Some(img_path) = img_path {
