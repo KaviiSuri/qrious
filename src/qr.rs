@@ -12,9 +12,11 @@ use crate::{
 
 pub type MaskFn = fn(u32, u32) -> bool;
 
+/// 010 -> black white black
 pub fn get_mask_fn(mask: u8) -> Option<MaskFn> {
     match mask {
         0b000 => Some(|x: u32, _: u32| -> bool { x % 3 == 0 }),
+        0b010 => Some(|x: u32, y: u32| -> bool { (x + y) % 2 == 0 }),
         _ => None,
     }
 }
@@ -78,7 +80,7 @@ impl Code {
                 mask_val |= 1 << (i);
             }
         }
-        let mask_fn = get_mask_fn(mask_val).ok_or(anyhow!("No mask fn found {mask_val}"))?;
+        let mask_fn = get_mask_fn(mask_val).ok_or(anyhow!("No mask fn found {mask_val:#05b}"))?;
 
         Ok(DataBitIter::new(self, mask_fn, img))
     }
@@ -177,6 +179,7 @@ impl Iterator for HorizFormatIter<'_> {
     }
 }
 
+/// black is 1, white is 0 (different from masks)
 pub struct DataBitIter<'a> {
     code: &'a Code,
     x: isize,
