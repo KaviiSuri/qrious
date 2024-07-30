@@ -146,6 +146,10 @@ impl Code {
         HorizFormatIter::new(self)
     }
     #[allow(dead_code)]
+    pub fn vert_format_iter(&self) -> VertFormatIter {
+        VertFormatIter::new(self)
+    }
+    #[allow(dead_code)]
     pub fn bit_iter<'a>(&'a self, img: &'a image::DynamicImage) -> Result<DataBitIter> {
         let mut mask_val = 0;
         for (i, module) in self
@@ -272,11 +276,48 @@ impl Iterator for HorizFormatIter<'_> {
                 self.x = second_half_start;
             }
 
-            if prev_x == FORMAT_PATTERN_OFFSET {
+            if prev_x == TIMER_PATTERN_OFFSET {
                 continue;
             }
 
             return Some(self.code.idx_to_module(prev_x, FORMAT_PATTERN_OFFSET));
+        }
+    }
+}
+pub struct VertFormatIter<'a> {
+    code: &'a Code,
+    y: usize,
+}
+
+impl<'a> VertFormatIter<'a> {
+    fn new(code: &'a Code) -> Self {
+        Self {
+            code,
+            y: code.num_vert_elems(),
+        }
+    }
+}
+impl Iterator for VertFormatIter<'_> {
+    type Item = Rect;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if self.y == 0 {
+                return None;
+            }
+
+            self.y -= 1;
+            let first_half_end = self.code.num_vert_elems() - FINDER_NUM_ELEMS - 1;
+
+            if self.y == first_half_end {
+                self.y = FINDER_NUM_ELEMS + 1;
+            }
+
+            if self.y == TIMER_PATTERN_OFFSET {
+                continue;
+            }
+
+            return Some(self.code.idx_to_module(FORMAT_PATTERN_OFFSET, self.y));
         }
     }
 }

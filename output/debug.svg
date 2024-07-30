@@ -334,7 +334,6 @@
   <rect x="55.620003" y="117.48001" width="12.539997" height="12.560005" stroke="purple" fill="none" stroke-width="1.765" />
   <rect x="68.16" y="117.48001" width="12.540001" height="12.560005" stroke="purple" fill="none" stroke-width="1.765" />
   <rect x="80.7" y="117.48001" width="12.540001" height="12.560005" stroke="purple" fill="none" stroke-width="1.765" />
-  <rect x="93.23999" y="117.48001" width="12.540001" height="12.560005" stroke="purple" fill="none" stroke-width="1.765" />
   <rect x="105.78" y="117.48001" width="12.540001" height="12.560005" stroke="purple" fill="none" stroke-width="1.765" />
   <rect x="231.18" y="117.48001" width="12.539993" height="12.560005" stroke="purple" fill="none" stroke-width="1.765" />
   <rect x="243.72" y="117.48001" width="12.540009" height="12.560005" stroke="purple" fill="none" stroke-width="1.765" />
@@ -344,6 +343,21 @@
   <rect x="293.88" y="117.48001" width="12.540009" height="12.560005" stroke="purple" fill="none" stroke-width="1.765" />
   <rect x="306.41998" y="117.48001" width="12.540009" height="12.560005" stroke="purple" fill="none" stroke-width="1.765" />
   <rect x="318.95996" y="117.48001" width="12.540009" height="12.560005" stroke="purple" fill="none" stroke-width="1.765" />
+  <rect x="118.31999" y="318.44" width="12.540001" height="12.559998" stroke="purple" fill="none" stroke-width="1.765" />
+  <rect x="118.31999" y="305.88" width="12.540001" height="12.559998" stroke="purple" fill="none" stroke-width="1.765" />
+  <rect x="118.31999" y="293.32" width="12.540001" height="12.559998" stroke="purple" fill="none" stroke-width="1.765" />
+  <rect x="118.31999" y="280.76" width="12.540001" height="12.559998" stroke="purple" fill="none" stroke-width="1.765" />
+  <rect x="118.31999" y="268.2" width="12.540001" height="12.559998" stroke="purple" fill="none" stroke-width="1.765" />
+  <rect x="118.31999" y="255.64001" width="12.540001" height="12.559998" stroke="purple" fill="none" stroke-width="1.765" />
+  <rect x="118.31999" y="243.08" width="12.540001" height="12.559998" stroke="purple" fill="none" stroke-width="1.765" />
+  <rect x="118.31999" y="117.48001" width="12.540001" height="12.560005" stroke="purple" fill="none" stroke-width="1.765" />
+  <rect x="118.31999" y="104.920006" width="12.540001" height="12.559998" stroke="purple" fill="none" stroke-width="1.765" />
+  <rect x="118.31999" y="79.8" width="12.540001" height="12.559998" stroke="purple" fill="none" stroke-width="1.765" />
+  <rect x="118.31999" y="67.240005" width="12.540001" height="12.559998" stroke="purple" fill="none" stroke-width="1.765" />
+  <rect x="118.31999" y="54.68" width="12.540001" height="12.559998" stroke="purple" fill="none" stroke-width="1.765" />
+  <rect x="118.31999" y="42.120003" width="12.540001" height="12.560001" stroke="purple" fill="none" stroke-width="1.765" />
+  <rect x="118.31999" y="29.560003" width="12.540001" height="12.560001" stroke="purple" fill="none" stroke-width="1.765" />
+  <rect x="118.31999" y="17" width="12.540001" height="12.560001" stroke="purple" fill="none" stroke-width="1.765" />
   <rect x="318.95996" y="318.44" width="12.540009" height="12.559998" stroke="orange" fill="none" stroke-width="1.765" />
   <text x="324.72998" y="325.22" font-size="7.06" stroke-width="1.765" fill="red">0</text>
   <rect x="306.41998" y="318.44" width="12.540009" height="12.559998" stroke="orange" fill="none" stroke-width="1.765" />
