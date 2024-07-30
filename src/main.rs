@@ -5,7 +5,7 @@ mod viz;
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use image::{GenericImageView, ImageReader};
-use qr::{DataBitIter, HorizFormatIter, HorizTimingIter, Output};
+use qr::{DataBitIter, HorizFormatIter, HorizTimingIter, Output, VertTimingIter};
 use std::{fs, path::PathBuf};
 
 use crate::viz::Visualizer;
@@ -41,7 +41,11 @@ fn main() -> Result<()> {
     code.bounds.draw(&mut dbg_vis, "gray", None)?;
     code.bounds.draw(&mut decoded_vis, "gray", None)?;
 
-    viz_timing_iter(code.horiz_timing_iter(), &mut dbg_vis)?;
+    viz_timing_iter(
+        code.horiz_timing_iter(),
+        code.vert_timing_iter(),
+        &mut dbg_vis,
+    )?;
     viz_format_iter(code.horiz_format_iter(), &mut dbg_vis)?;
     viz_bits(code.bit_iter(&img)?, &mut decoded_vis, &mut dbg_vis)?;
 
@@ -89,8 +93,15 @@ fn init_output_dir(cli: &Cli) -> Result<PathBuf> {
     Ok(file_name)
 }
 
-fn viz_timing_iter(iter: HorizTimingIter, visualizer: &mut Visualizer) -> Result<()> {
-    for module in iter {
+fn viz_timing_iter(
+    horiz_iter: HorizTimingIter,
+    vert_iter: VertTimingIter,
+    visualizer: &mut Visualizer,
+) -> Result<()> {
+    for module in horiz_iter {
+        module.draw(visualizer, "red", None)?;
+    }
+    for module in vert_iter {
         module.draw(visualizer, "red", None)?;
     }
     Ok(())

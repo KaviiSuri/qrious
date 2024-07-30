@@ -21,6 +21,11 @@ pub fn get_mask_fn(mask: u8) -> Option<MaskFn> {
     }
 }
 
+const FINDER_NUM_ELEMS: usize = 7;
+const TIMER_PATTERN_OFFSET: usize = FINDER_NUM_ELEMS - 1;
+const TIMER_PATTERN_START: usize = FINDER_NUM_ELEMS;
+const FORMAT_PATTERN_OFFSET: usize = FINDER_NUM_ELEMS + 1;
+
 fn find_elem_size(
     timing_x: u32,
     timing_iter_end: u32,
@@ -133,6 +138,10 @@ impl Code {
         HorizTimingIter::new(self)
     }
     #[allow(dead_code)]
+    pub fn vert_timing_iter(&self) -> VertTimingIter {
+        VertTimingIter::new(self)
+    }
+    #[allow(dead_code)]
     pub fn horiz_format_iter(&self) -> HorizFormatIter {
         HorizFormatIter::new(self)
     }
@@ -209,10 +218,31 @@ impl Iterator for HorizTimingIter<'_> {
     }
 }
 
-const FINDER_NUM_ELEMS: usize = 7;
-const TIMER_PATTERN_OFFSET: usize = FINDER_NUM_ELEMS - 1;
-const TIMER_PATTERN_START: usize = FINDER_NUM_ELEMS;
-const FORMAT_PATTERN_OFFSET: usize = FINDER_NUM_ELEMS + 1;
+pub struct VertTimingIter<'a> {
+    code: &'a Code,
+    y: usize,
+}
+impl<'a> VertTimingIter<'a> {
+    #[allow(dead_code)]
+    fn new(code: &'a Code) -> Self {
+        Self {
+            code,
+            y: TIMER_PATTERN_START,
+        }
+    }
+}
+impl Iterator for VertTimingIter<'_> {
+    type Item = Rect;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.y >= self.code.num_vert_elems() - TIMER_PATTERN_START {
+            return None;
+        }
+        let timing_rect = self.code.idx_to_module(TIMER_PATTERN_OFFSET, self.y);
+        self.y += 1;
+        Some(timing_rect)
+    }
+}
 
 pub struct HorizFormatIter<'a> {
     code: &'a Code,
