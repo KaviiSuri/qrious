@@ -55,7 +55,7 @@ impl Visualizer {
             width,
             height,
             svg_writer,
-            stroke_width: (width as f32) / 1000.0,
+            stroke_width: (width as f32) / 200.0,
             font_size: (width as f32) / 50.0,
             finished: false,
         })
@@ -94,7 +94,7 @@ impl Visualizer {
                 .attr("height", &h.to_string())
                 .attr("stroke", color)
                 .attr("fill", fill.unwrap_or("none"))
-                .attr("stroke-width", "0.5"),
+                .attr("stroke-width", self.stroke_width.to_string().as_str()),
         )?;
         self.svg_writer.write(XmlEvent::end_element())?;
         Ok(())
