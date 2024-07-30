@@ -7,6 +7,7 @@ use clap::Parser;
 use image::{GenericImageView, ImageReader};
 use qr::{DataBitIter, HorizFormatIter, HorizTimingIter, Output, VertFormatIter, VertTimingIter};
 use std::{fs, path::PathBuf};
+use util::Rect;
 
 use crate::viz::Visualizer;
 
@@ -40,6 +41,8 @@ fn main() -> Result<()> {
     let code = qr::Code::new(&img, Some(&mut dbg_vis))?;
     code.bounds.draw(&mut dbg_vis, "gray", None)?;
     code.bounds.draw(&mut decoded_vis, "gray", None)?;
+    inspect_timing(code.horiz_timing_iter(), &img)?;
+    inspect_timing(code.vert_timing_iter(), &img)?;
 
     viz_timing_iter(
         code.horiz_timing_iter(),
@@ -121,6 +124,17 @@ fn viz_format_iter(
     }
     for module in vert_iter {
         module.draw(visualizer, "purple", None)?;
+    }
+    Ok(())
+}
+
+fn inspect_timing(iter: impl Iterator<Item = Rect>, img: &image::DynamicImage) -> Result<()> {
+    let mut expected = true;
+    for module in iter {
+        if img::is_white_module(img, &module) != expected {
+            return Err(anyhow!("Timing module {:?} is not as expected", &module));
+        }
+        expected = !expected;
     }
     Ok(())
 }
