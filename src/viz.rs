@@ -75,7 +75,15 @@ impl Visualizer {
     }
 
     #[allow(dead_code)]
-    pub fn draw_rect(&mut self, cx: f32, cy: f32, w: f32, h: f32, color: &str) -> Result<()> {
+    pub fn draw_rect(
+        &mut self,
+        cx: f32,
+        cy: f32,
+        w: f32,
+        h: f32,
+        color: &str,
+        fill: Option<&str>,
+    ) -> Result<()> {
         let x = cx - w / 2.0;
         let y = cy - h / 2.0;
         self.svg_writer.write(
@@ -85,7 +93,7 @@ impl Visualizer {
                 .attr("width", &w.to_string())
                 .attr("height", &h.to_string())
                 .attr("stroke", color)
-                .attr("fill", "none")
+                .attr("fill", fill.unwrap_or("none"))
                 .attr("stroke-width", "0.5"),
         )?;
         self.svg_writer.write(XmlEvent::end_element())?;

@@ -83,8 +83,15 @@ impl Rect {
     }
 
     #[allow(dead_code)]
-    pub fn draw(&self, viz: &mut Visualizer, color: &str) -> Result<()> {
-        viz.draw_rect(self.cx(), self.cy(), self.width(), self.height(), color)?;
+    pub fn draw(&self, viz: &mut Visualizer, color: &str, fill: Option<&str>) -> Result<()> {
+        viz.draw_rect(
+            self.cx(),
+            self.cy(),
+            self.width(),
+            self.height(),
+            color,
+            fill,
+        )?;
         Ok(())
     }
 }

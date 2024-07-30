@@ -12,7 +12,7 @@ pub fn get_mask_fn(mask: u8) -> Option<impl Fn(u32, u32) -> bool> {
 }
 
 pub struct Code {
-    bounds: Rect,
+    pub bounds: Rect,
     elem_width: f32,
     elem_height: f32,
 }
@@ -388,6 +388,9 @@ fn add_rect_to_bucket(buckets: &mut Vec<Vec<Rect>>, rect: Rect) {
         .push(rect);
 }
 
+/// Finds the finder patterns using the pattern 1:1:3:1:1
+/// It does it horizontally and vertically, and finds intersection between them
+/// to cluster and find 3 points at the end.
 pub fn find_patterns(
     img: &image::DynamicImage,
     mut visualizer: Option<&mut Visualizer>,
