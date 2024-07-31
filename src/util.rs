@@ -115,3 +115,8 @@ pub trait IteratorExt: Iterator {
 }
 
 impl<I: Iterator> IteratorExt for I {}
+
+pub struct GridPoint {
+    pub x: usize,
+    pub y: usize,
+}

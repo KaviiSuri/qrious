@@ -1,4 +1,4 @@
-use std::{fmt::write, iter::Enumerate};
+use std::iter::Enumerate;
 
 use anyhow::{anyhow, Result};
 use approx::relative_eq;
@@ -6,7 +6,7 @@ use image::GenericImageView;
 
 use crate::{
     img::{self, ToVert},
-    util::{IteratorExt, Rect},
+    util::{GridPoint, IteratorExt, Rect},
     viz::Visualizer,
 };
 
@@ -101,6 +101,7 @@ pub struct Code {
     pub bounds: Rect,
     elem_width: f32,
     elem_height: f32,
+    alignment_positions: Vec<GridPoint>,
 }
 
 impl Code {
@@ -135,10 +136,19 @@ impl Code {
 
         let (elem_width, elem_height) = find_elem_sizes(&qr_rect, img, finder_width, finder_height);
 
+        let alignment_positions =
+            AlignmentPatternIter::new(elem_width, elem_height, qr_rect.clone(), img)
+                .map(|pattern| GridPoint {
+                    x: pattern.x,
+                    y: pattern.y,
+                })
+                .collect();
+
         Ok(Self {
             bounds: qr_rect,
             elem_width,
             elem_height,
+            alignment_positions,
         })
     }
 
@@ -175,7 +185,12 @@ impl Code {
         }
         let mask_fn = get_mask_fn(mask_val).ok_or(anyhow!("No mask fn found {mask_val:#05b}"))?;
 
-        Ok(DataBitIter::new(self, mask_fn, img))
+        Ok(DataBitIter::new(
+            self,
+            mask_fn,
+            img,
+            &self.alignment_positions,
+        ))
     }
 
     #[allow(dead_code)]
@@ -334,10 +349,16 @@ pub struct DataBitIter<'a> {
     movement_direction: isize,
     mask_fn: MaskFn,
     img: &'a image::DynamicImage,
+    alignment_patterns: &'a [GridPoint],
 }
 
 impl<'a> DataBitIter<'a> {
-    fn new(code: &'a Code, mask_fn: MaskFn, img: &'a image::DynamicImage) -> Self {
+    fn new(
+        code: &'a Code,
+        mask_fn: MaskFn,
+        img: &'a image::DynamicImage,
+        alignment_patterns: &'a [GridPoint],
+    ) -> Self {
         Self {
             code,
             x: code.num_horiz_elems() as isize - 2,
@@ -346,48 +367,11 @@ impl<'a> DataBitIter<'a> {
             movement_direction: -1,
             mask_fn,
             img,
+            alignment_patterns,
         }
     }
 
-    fn should_turn_around(&self, x: isize, y: isize) -> bool {
-        let finder_num_elems = FINDER_NUM_ELEMS as isize;
-        let width = self.code.num_horiz_elems() as isize;
-        let height = self.code.num_vert_elems() as isize;
-
-        let x_left_of_left_finder = x < finder_num_elems + 2;
-        let y_above_top_finder = y < finder_num_elems + 2;
-
-        let in_tl_finder = x_left_of_left_finder && y_above_top_finder;
-
-        if in_tl_finder {
-            return true;
-        }
-
-        let y_below_bottom_finder = y >= height - finder_num_elems - 1;
-        let in_bl_finder = x_left_of_left_finder && y_below_bottom_finder;
-
-        if in_bl_finder {
-            return true;
-        }
-
-        let x_right_of_right_finder = x > width - finder_num_elems - 1;
-        let in_tr_finder = x_right_of_right_finder && y_above_top_finder;
-        if in_tr_finder {
-            return true;
-        }
-
-        let out_of_bounds = x >= width || x < 0 || y >= height || y < 0;
-        if out_of_bounds {
-            return true;
-        }
-        return false;
-    }
-
-    fn should_skip(&self, x: isize, y: isize) -> bool {
-        return x == TIMER_PATTERN_OFFSET as isize || y == TIMER_PATTERN_OFFSET as isize;
-    }
-
-    fn do_zig_zag(&mut self) {
+    fn do_zig_zag(&mut self) -> bool {
         if self.moving_vertically {
             self.x += 1;
             self.y += self.movement_direction as isize;
@@ -396,27 +380,167 @@ impl<'a> DataBitIter<'a> {
         }
 
         self.moving_vertically = !self.moving_vertically;
+
+        return !self.moving_vertically;
     }
 
-    fn do_turn_around(&mut self, last_move_vertical: bool) -> Result<()> {
-        if !self.should_turn_around(self.x, self.y) {
-            return Ok(());
+    fn do_continue(&mut self, last_move_vertical: bool) {
+        if last_move_vertical {
+            self.y += self.movement_direction;
+        } else {
+            self.x -= 1;
         }
+    }
 
-        if !last_move_vertical {
-            eprintln!(
-                "UNHANDLED HORIZONTAL OUT OF BOUNDS: ({}, {})",
-                self.x, self.y
-            );
-            return Err(anyhow!("unimplemented"));
-        }
+    fn do_turn_around(&mut self) {
         self.x -= 2;
         self.y -= self.movement_direction;
         self.movement_direction *= -1;
         self.moving_vertically = false;
-        return Ok(());
     }
 }
+
+enum IterationAction {
+    ContinueZigZag,
+    ContinueStraight,
+    TurnAround,
+    Finish,
+    Yield,
+}
+
+struct IterationActionMachine<'a> {
+    x: isize,
+    y: isize,
+    #[allow(dead_code)]
+    width: isize,
+    height: isize,
+
+    x_right_of_right_finder: bool,
+    y_above_top_finder: bool,
+    x_left_of_left_finder: bool,
+    y_below_bottom_finder: bool,
+    alignment_patterns: &'a [GridPoint],
+}
+
+impl<'a> IterationActionMachine<'a> {
+    fn new(iter: &'a DataBitIter) -> Self {
+        let x = iter.x;
+        let y = iter.y;
+        let finder_num_elems = FINDER_NUM_ELEMS as isize;
+        let width = iter.code.num_horiz_elems() as isize;
+        let height = iter.code.num_vert_elems() as isize;
+
+        let y_above_top_finder = y < finder_num_elems + 2;
+        let x_right_of_right_finder = x > width - finder_num_elems - 1;
+        let x_left_of_left_finder = x < finder_num_elems + 2;
+        let y_below_bottom_finder = y >= height - finder_num_elems - 1;
+
+        return Self {
+            x,
+            y,
+            width,
+            height,
+            x_right_of_right_finder,
+            y_above_top_finder,
+            x_left_of_left_finder,
+            y_below_bottom_finder,
+            alignment_patterns: iter.alignment_patterns,
+        };
+    }
+    fn is_finished(&self) -> bool {
+        self.x < 0
+    }
+    fn is_out_of_bounds_y(&self) -> bool {
+        self.y >= self.height || self.y < 0
+    }
+    fn in_tr_finder(&self) -> bool {
+        self.x_right_of_right_finder && self.y_above_top_finder
+    }
+    fn in_tl_finder(&self) -> bool {
+        self.x_left_of_left_finder && self.y_above_top_finder
+    }
+    fn in_bl_finder(&self) -> bool {
+        self.x_left_of_left_finder && self.y_below_bottom_finder
+    }
+    fn is_in_timing_pattern(&self) -> bool {
+        self.x == TIMER_PATTERN_OFFSET as isize || self.y == TIMER_PATTERN_OFFSET as isize
+    }
+    fn is_in_alignment_pattern(&self) -> bool {
+        for tl in self.alignment_patterns {
+            let x_in_alignment =
+                self.x >= tl.x as isize && self.x < (tl.x + ALIGNMENT_PATTERN_NUM_ELEMS) as isize;
+            let y_in_alignment =
+                self.y >= tl.y as isize && self.y < (tl.y + ALIGNMENT_PATTERN_NUM_ELEMS) as isize;
+
+            if x_in_alignment && y_in_alignment {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+impl DataBitIter<'_> {
+    fn update_pos(&mut self) -> bool {
+        let mut last_move_vert = self.do_zig_zag();
+        loop {
+            let next_action = self.check_next_action();
+            match next_action {
+                IterationAction::ContinueZigZag => last_move_vert = self.do_zig_zag(),
+                IterationAction::ContinueStraight => self.do_continue(last_move_vert),
+                IterationAction::TurnAround => {
+                    self.do_turn_around();
+                    last_move_vert = false;
+                }
+                IterationAction::Finish => return true,
+                IterationAction::Yield => return false,
+            }
+        }
+    }
+
+    fn check_next_action(&self) -> IterationAction {
+        let action_machine = IterationActionMachine::new(self);
+
+        if action_machine.is_finished() {
+            return IterationAction::Finish;
+        }
+
+        if action_machine.is_out_of_bounds_y() {
+            return IterationAction::TurnAround;
+        }
+
+        if action_machine.in_tr_finder() {
+            return IterationAction::TurnAround;
+        }
+
+        if action_machine.in_tl_finder() {
+            if self.movement_direction == -1 {
+                return IterationAction::TurnAround;
+            } else {
+                return IterationAction::ContinueZigZag;
+            }
+        }
+
+        if action_machine.in_bl_finder() {
+            if self.movement_direction == 1 {
+                return IterationAction::TurnAround;
+            } else {
+                return IterationAction::ContinueZigZag;
+            }
+        }
+
+        if action_machine.is_in_timing_pattern() {
+            return IterationAction::ContinueStraight;
+        }
+
+        if action_machine.is_in_alignment_pattern() {
+            return IterationAction::ContinueZigZag;
+        }
+
+        return IterationAction::Yield;
+    }
+}
+
 pub struct Output {
     #[allow(dead_code)]
     pub module: Rect,
@@ -431,18 +555,10 @@ impl Iterator for DataBitIter<'_> {
     type Item = Output;
 
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let last_move_vertical = self.moving_vertically;
-            self.do_zig_zag();
-
-            if let Err(_) = self.do_turn_around(last_move_vertical) {
-                return None;
-            }
-
-            if !self.should_skip(self.x, self.y) {
-                break;
-            }
+        if self.update_pos() {
+            return None;
         }
+
         let module = self.code.idx_to_module(self.x as usize, self.y as usize);
         let is_dark = !img::is_white_module(self.img, &module);
         return Some(Output {
@@ -539,25 +655,16 @@ pub struct AlignmentPatternIter<'a> {
 
 impl<'a> AlignmentPatternIter<'a> {
     pub fn for_code(code: &'a Code, img: &'a image::DynamicImage) -> AlignmentPatternIter<'a> {
-        AlignmentPatternIter::new(
-            code.elem_width,
-            code.elem_height,
-            code.num_horiz_elems(),
-            code.num_vert_elems(),
-            code.bounds.clone(),
-            img,
-        )
+        AlignmentPatternIter::new(code.elem_width, code.elem_height, code.bounds.clone(), img)
     }
     pub fn new(
         elem_width: f32,
         elem_height: f32,
-        grid_width: usize,
-        grid_height: usize,
-
         qr_bounds: Rect,
-
         img: &'a image::DynamicImage,
     ) -> Self {
+        let grid_width = (qr_bounds.width() / elem_width) as usize;
+        let grid_height = (qr_bounds.height() / elem_height) as usize;
         Self {
             elem_width,
             elem_height,

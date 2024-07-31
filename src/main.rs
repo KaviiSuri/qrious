@@ -61,7 +61,7 @@ fn main() -> Result<()> {
         code.vert_format_iter(),
         &mut dbg_vis,
     )?;
-    // viz_bits(code.bit_iter(&img)?, &mut decoded_vis, &mut dbg_vis)?;
+    viz_bits(code.bit_iter(&img)?, &mut decoded_vis, &mut dbg_vis)?;
 
     let iter = code.data_iter(&img)?;
     let encoding = iter.encoding;
