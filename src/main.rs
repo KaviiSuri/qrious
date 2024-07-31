@@ -61,7 +61,7 @@ fn main() -> Result<()> {
     println!("encoding = {encoding:#05b}");
     let data: Vec<_> = iter.collect();
     println!("data = {:?}", data);
-    if encoding == 0b0010 {
+    if encoding == 0b0010 || encoding == 0b0100 {
         let ascii: String = data.iter().map(|&b| b as char).collect();
         println!("ascii = {:?}", ascii);
     } else {

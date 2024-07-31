@@ -493,6 +493,9 @@ impl Iterator for DataByteIter<'_> {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.num_bytes_read >= self.length {
+            return None;
+        }
         if let Ok(i) = self.iter.take_or_err(8) {
             let mut next_byte: u8 = 0;
             for (i, output) in i.iter() {
@@ -508,6 +511,7 @@ impl Iterator for DataByteIter<'_> {
                 }
             }
         }
+
         return None;
     }
 }
