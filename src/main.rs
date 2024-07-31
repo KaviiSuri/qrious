@@ -9,7 +9,7 @@ use qr::{DataBitIter, HorizFormatIter, HorizTimingIter, Output, VertFormatIter, 
 use std::{fs, path::PathBuf};
 use util::Rect;
 
-use crate::viz::Visualizer;
+use crate::{qr::AlignmentPatternIter, viz::Visualizer};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -44,6 +44,13 @@ fn main() -> Result<()> {
     inspect_timing(code.horiz_timing_iter(), &img)?;
     inspect_timing(code.vert_timing_iter(), &img)?;
 
+    let alignment_iter = AlignmentPatternIter::for_code(&code, &img);
+    for pattern in alignment_iter {
+        pattern
+            .module
+            .draw(&mut dbg_vis, "blue", Some("rgba(0, 255, 0, 0.6)"))?;
+    }
+
     viz_timing_iter(
         code.horiz_timing_iter(),
         code.vert_timing_iter(),
@@ -54,7 +61,7 @@ fn main() -> Result<()> {
         code.vert_format_iter(),
         &mut dbg_vis,
     )?;
-    viz_bits(code.bit_iter(&img)?, &mut decoded_vis, &mut dbg_vis)?;
+    // viz_bits(code.bit_iter(&img)?, &mut decoded_vis, &mut dbg_vis)?;
 
     let iter = code.data_iter(&img)?;
     let encoding = iter.encoding;

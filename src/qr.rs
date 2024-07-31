@@ -1,4 +1,4 @@
-use std::iter::Enumerate;
+use std::{fmt::write, iter::Enumerate};
 
 use anyhow::{anyhow, Result};
 use approx::relative_eq;
@@ -86,6 +86,15 @@ fn find_elem_sizes(
     );
 
     return (elem_width, elem_height);
+}
+
+pub fn idx_to_module(bounds: &Rect, elem_width: f32, elem_height: f32, x: usize, y: usize) -> Rect {
+    let left = (x as f32 * elem_width) + bounds.left();
+    let top = (y as f32 * elem_height) + bounds.top();
+    let right = left + elem_width;
+    let bottom = top + elem_height;
+
+    Rect::from_corners(left, top, right, bottom)
 }
 
 pub struct Code {
@@ -176,12 +185,7 @@ impl Code {
 
     #[allow(dead_code)]
     pub fn idx_to_module(&self, x: usize, y: usize) -> Rect {
-        let left = (x as f32 * self.elem_width) + self.bounds.left();
-        let top = (y as f32 * self.elem_height) + self.bounds.top();
-        let right = left + self.elem_width;
-        let bottom = top + self.elem_height;
-
-        Rect::from_corners(left, top, right, bottom)
+        idx_to_module(&self.bounds, self.elem_width, self.elem_height, x, y)
     }
 
     #[allow(dead_code)]
@@ -513,6 +517,126 @@ impl Iterator for DataByteIter<'_> {
         }
 
         return None;
+    }
+}
+
+const ALIGNMENT_PATTERN_NUM_ELEMS: usize = 5;
+
+pub struct AlignmentPatternIter<'a> {
+    elem_width: f32,
+    elem_height: f32,
+    grid_width: usize,
+    grid_height: usize,
+
+    qr_bounds: Rect,
+
+    img: &'a image::DynamicImage,
+
+    // top, left
+    x: usize,
+    y: usize,
+}
+
+impl<'a> AlignmentPatternIter<'a> {
+    pub fn for_code(code: &'a Code, img: &'a image::DynamicImage) -> AlignmentPatternIter<'a> {
+        AlignmentPatternIter::new(
+            code.elem_width,
+            code.elem_height,
+            code.num_horiz_elems(),
+            code.num_vert_elems(),
+            code.bounds.clone(),
+            img,
+        )
+    }
+    pub fn new(
+        elem_width: f32,
+        elem_height: f32,
+        grid_width: usize,
+        grid_height: usize,
+
+        qr_bounds: Rect,
+
+        img: &'a image::DynamicImage,
+    ) -> Self {
+        Self {
+            elem_width,
+            elem_height,
+            grid_width,
+            grid_height,
+            qr_bounds,
+            img,
+            x: 0,
+            y: 0,
+        }
+    }
+
+    fn is_alignment_element(&self) -> bool {
+        for y_off in 0..ALIGNMENT_PATTERN_NUM_ELEMS {
+            for x_off in 0..ALIGNMENT_PATTERN_NUM_ELEMS {
+                let x = self.x + x_off;
+                let y = self.y + y_off;
+                let is_white = img::is_white_module(
+                    self.img,
+                    &idx_to_module(&self.qr_bounds, self.elem_width, self.elem_height, x, y),
+                );
+                let should_be_white = ((y_off == 1 || y_off == 3)
+                    && (x_off > 0 && x_off < ALIGNMENT_PATTERN_NUM_ELEMS - 1))
+                    || ((x_off == 1 || x_off == 3)
+                        && (y_off > 0 && y_off < ALIGNMENT_PATTERN_NUM_ELEMS - 1));
+
+                if is_white != should_be_white {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+}
+
+pub struct AlignmentPattern {
+    pub module: Rect,
+    pub x: usize,
+    pub y: usize,
+}
+
+impl Iterator for AlignmentPatternIter<'_> {
+    type Item = AlignmentPattern;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if self.y >= self.grid_height - ALIGNMENT_PATTERN_NUM_ELEMS {
+                return None;
+            }
+
+            let found_align = if self.is_alignment_element() {
+                let mut module = idx_to_module(
+                    &self.qr_bounds,
+                    self.elem_width,
+                    self.elem_height,
+                    self.x,
+                    self.y,
+                );
+                module.bottom += self.elem_height * (ALIGNMENT_PATTERN_NUM_ELEMS - 1) as f32;
+                module.right += self.elem_width * (ALIGNMENT_PATTERN_NUM_ELEMS - 1) as f32;
+                Some(AlignmentPattern {
+                    x: self.x,
+                    y: self.y,
+                    module,
+                })
+            } else {
+                None
+            };
+            self.x += 1;
+            self.x += 1;
+            if self.x >= self.grid_width - ALIGNMENT_PATTERN_NUM_ELEMS {
+                self.x = 0;
+                self.y += 1;
+            }
+
+            if found_align.is_some() {
+                return found_align;
+            }
+        }
     }
 }
 

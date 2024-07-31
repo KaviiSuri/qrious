@@ -55,8 +55,8 @@ impl Visualizer {
             width,
             height,
             svg_writer,
-            stroke_width: (width as f32) / 200.0,
-            font_size: (width as f32) / 50.0,
+            stroke_width: (width as f32) / 1000.0,
+            font_size: (width as f32) / 500.0,
             finished: false,
         })
     }

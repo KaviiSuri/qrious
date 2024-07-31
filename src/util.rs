@@ -1,12 +1,12 @@
 use crate::viz::Visualizer;
 use anyhow::{anyhow, Result};
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Rect {
-    top: f32,
-    bottom: f32,
-    left: f32,
-    right: f32,
+    pub top: f32,
+    pub bottom: f32,
+    pub left: f32,
+    pub right: f32,
 }
 
 impl Rect {
